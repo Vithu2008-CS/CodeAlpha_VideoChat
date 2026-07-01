@@ -85,8 +85,10 @@ async function main() {
   // Render the initial participants list (just you).
   renderParticipants(displayName, new Map());
 
-  // Acquire media + join.
-  await rtc.start(roomCode);
+  // Acquire media + join using lobby preference states.
+  const initialMic = localStorage.getItem('lobby_mic_enabled') !== 'false';
+  const initialCam = localStorage.getItem('lobby_cam_enabled') !== 'false';
+  await rtc.start(roomCode, { initialMic, initialCam });
 
   // Notify peers if the tab is closed.
   window.addEventListener('beforeunload', () => rtc.leave());

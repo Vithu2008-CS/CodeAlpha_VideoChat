@@ -30,6 +30,115 @@ export function createWebRTC({ socket, displayName, onParticipants, onStatus, to
   // socketId -> displayName (everyone we know about, for the participants list)
   const names = new Map();
 
+  // Active Speaker audio context state
+  let audioCtx = null;
+  const analyzers = new Map(); // socketId or 'local' -> { analyser, dataArray, source }
+  let speakerInterval = null;
+
+  function setupStreamAnalyzer(id, stream) {
+    if (!stream || stream.getAudioTracks().length === 0) return;
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        const resume = () => {
+          audioCtx.resume();
+          window.removeEventListener('click', resume);
+        };
+        window.addEventListener('click', resume, { passive: true });
+      }
+      
+      cleanupStreamAnalyzer(id);
+      
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64; // small fft size is sufficient for volume checks
+      source.connect(analyser);
+      
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      analyzers.set(id, { analyser, dataArray, source });
+    } catch (e) {
+      console.warn('Failed to setup audio analyzer:', e);
+    }
+  }
+
+  function cleanupStreamAnalyzer(id) {
+    const data = analyzers.get(id);
+    if (data) {
+      try { data.source.disconnect(); } catch {}
+      analyzers.delete(id);
+    }
+  }
+
+  function startSpeakerDetection() {
+    if (speakerInterval) clearInterval(speakerInterval);
+    speakerInterval = setInterval(() => {
+      let maxVal = 0;
+      let activeId = null;
+
+      if (!audioCtx || audioCtx.state === 'suspended') return;
+
+      analyzers.forEach((data, id) => {
+        if (id === 'local' && !micEnabled) return;
+        
+        data.analyser.getByteFrequencyData(data.dataArray);
+        
+        let sum = 0;
+        for (let i = 0; i < data.dataArray.length; i++) {
+          sum += data.dataArray[i];
+        }
+        const avg = sum / data.dataArray.length;
+
+        if (avg > 15 && avg > maxVal) {
+          maxVal = avg;
+          activeId = id;
+        }
+      });
+
+      const localTileEl = document.getElementById('localTile');
+      if (activeId === 'local') {
+        localTileEl?.classList.add('active-speaker');
+        ensureSpeakerIndicator(localTileEl);
+      } else {
+        localTileEl?.classList.remove('active-speaker');
+        removeSpeakerIndicator(localTileEl);
+      }
+
+      peers.forEach((entry, socketId) => {
+        const tile = document.getElementById(`tile-${socketId}`);
+        if (tile) {
+          if (socketId === activeId) {
+            tile.classList.add('active-speaker');
+            ensureSpeakerIndicator(tile);
+          } else {
+            tile.classList.remove('active-speaker');
+            removeSpeakerIndicator(tile);
+          }
+        }
+      });
+    }, 200);
+  }
+
+  function ensureSpeakerIndicator(tile) {
+    const nameEl = tile.querySelector('.name');
+    if (nameEl && !nameEl.querySelector('.speaking-indicator')) {
+      const indicator = document.createElement('div');
+      indicator.className = 'speaking-indicator';
+      indicator.innerHTML = '<span></span><span></span><span></span>';
+      nameEl.appendChild(indicator);
+    }
+  }
+
+  function removeSpeakerIndicator(tile) {
+    const nameEl = tile.querySelector('.name');
+    if (nameEl) {
+      nameEl.querySelector('.speaking-indicator')?.remove();
+    }
+  }
+
   // ---- Participants helpers ----
   function publishParticipants() {
     onParticipants?.(new Map(names));
