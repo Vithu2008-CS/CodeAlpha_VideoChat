@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · CodeAlpha VideoChat</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="center-wrap">
+    <div class="card">
+      <div class="brand">
+        <div class="logo">🎥</div>
+        <h1>CodeAlpha VideoChat<small>Real-time video, chat &amp; whiteboard</small></h1>
+      </div>
+
+      <h2>Welcome back</h2>
+      <p class="subtitle">Sign in to start or join a call.</p>
+
+      <form id="loginForm" novalidate>
+        <label for="identifier">Username or email</label>
+        <input id="identifier" name="identifier" type="text" autocomplete="username" placeholder="alice" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+
+        <div id="alert" class="alert error"></div>
+
+        <button class="btn" type="submit" id="submitBtn">Sign in</button>
+      </form>
+
+      <p class="switch-line">New here? <a href="/register.html">Create an account</a></p>
+
+      <div class="demo-box">
+        Demo accounts: <code>alice</code> / <code>bob</code> — password <code>password123</code>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, setSession, getToken } from '/js/api.js';
+
+    if (getToken()) location.href = '/lobby.html';
+
+    const form = document.getElementById('loginForm');
+    const alertBox = document.getElementById('alert');
+    const btn = document.getElementById('submitBtn');
+
+    function showError(msg) {
+      alertBox.textContent = msg;
+      alertBox.classList.add('show');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      try {
+        const identifier = document.getElementById('identifier').value.trim();
+        const password = document.getElementById('password').value;
+        const data = await api('/api/auth/login', { method: 'POST', body: { identifier, password } });
+        setSession(data.token, data.user);
+        location.href = '/lobby.html';
+      } catch (err) {
+        showError(err.message || 'Could not sign in');
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      }
+    });
+  </script>
+</body>
+</html>

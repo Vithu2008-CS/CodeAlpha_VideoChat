@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create account · CodeAlpha VideoChat</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="center-wrap">
+    <div class="card">
+      <div class="brand">
+        <div class="logo">🎥</div>
+        <h1>CodeAlpha VideoChat<small>Real-time video, chat &amp; whiteboard</small></h1>
+      </div>
+
+      <h2>Create your account</h2>
+      <p class="subtitle">It only takes a moment.</p>
+
+      <form id="registerForm" novalidate>
+        <div class="row">
+          <div>
+            <label for="username">Username</label>
+            <input id="username" type="text" autocomplete="username" placeholder="alice" required />
+          </div>
+          <div>
+            <label for="displayName">Display name</label>
+            <input id="displayName" type="text" autocomplete="nickname" placeholder="Alice" />
+          </div>
+        </div>
+
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" placeholder="alice@example.com" required />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" required />
+        <p class="hint">Passwords are hashed with bcrypt before they ever touch the database.</p>
+
+        <div id="alert" class="alert error"></div>
+
+        <button class="btn" type="submit" id="submitBtn">Create account</button>
+      </form>
+
+      <p class="switch-line">Already have an account? <a href="/login.html">Sign in</a></p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, setSession, getToken } from '/js/api.js';
+
+    if (getToken()) location.href = '/lobby.html';
+
+    const form = document.getElementById('registerForm');
+    const alertBox = document.getElementById('alert');
+    const btn = document.getElementById('submitBtn');
+
+    function showError(msg) {
+      alertBox.textContent = msg;
+      alertBox.classList.add('show');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      try {
+        const username = document.getElementById('username').value.trim();
+        const displayName = document.getElementById('displayName').value.trim() || username;
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const data = await api('/api/auth/register', {
+          method: 'POST',
+          body: { username, displayName, email, password },
+        });
+        setSession(data.token, data.user);
+        location.href = '/lobby.html';
+      } catch (err) {
+        showError(err.message || 'Could not create account');
+        btn.disabled = false;
+        btn.textContent = 'Create account';
+      }
+    });
+  </script>
+</body>
+</html>

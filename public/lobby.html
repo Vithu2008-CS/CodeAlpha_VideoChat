@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lobby · CodeAlpha VideoChat</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="center-wrap">
+    <div class="card wide">
+      <div class="brand">
+        <div class="logo">🎥</div>
+        <h1>CodeAlpha VideoChat<small>Real-time video, chat &amp; whiteboard</small></h1>
+        <div class="user-chip">
+          <div class="avatar" id="avatar">?</div>
+          <div>
+            <div id="userName">…</div>
+            <a href="#" id="logout" class="muted-text" style="font-size:12px;">Log out</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="lobby-grid">
+        <div>
+          <label for="displayName">Your display name in calls</label>
+          <input id="displayName" type="text" placeholder="How others see you" />
+          <p class="hint">This is the name shown on your video tile and in chat.</p>
+        </div>
+
+        <div class="divider">create a new room</div>
+
+        <div>
+          <label for="roomName">Room name (optional)</label>
+          <div class="row">
+            <input id="roomName" type="text" placeholder="Team standup" />
+            <button class="btn small" id="createBtn" style="flex:none;">Create &amp; join →</button>
+          </div>
+        </div>
+
+        <div class="divider">or join an existing one</div>
+
+        <div>
+          <label for="joinCode">Room code</label>
+          <div class="row">
+            <input id="joinCode" type="text" placeholder="ABC123" maxlength="8" style="text-transform:uppercase; letter-spacing:3px; font-family:ui-monospace,monospace;" />
+            <button class="btn small secondary" id="joinBtn" style="flex:none;">Join room</button>
+          </div>
+        </div>
+
+        <div id="alert" class="alert error"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, requireAuth, getUser, getDisplayName, setDisplayName, logout } from '/js/api.js';
+
+    requireAuth();
+
+    const user = getUser();
+    const alertBox = document.getElementById('alert');
+    const nameInput = document.getElementById('displayName');
+
+    function showError(msg) {
+      alertBox.className = 'alert error show';
+      alertBox.textContent = msg;
+    }
+
+    // Header + prefill
+    document.getElementById('userName').textContent = user?.displayName || user?.username || 'You';
+    document.getElementById('avatar').textContent = (user?.displayName || user?.username || '?').charAt(0).toUpperCase();
+    nameInput.value = getDisplayName();
+
+    // Confirm the session is still valid (and refresh the user if needed).
+    api('/api/auth/me').catch(() => {});
+
+    document.getElementById('logout').addEventListener('click', (e) => { e.preventDefault(); logout(); });
+
+    function persistName() {
+      const name = nameInput.value.trim() || user?.displayName || user?.username || 'Guest';
+      setDisplayName(name);
+      return name;
+    }
+
+    document.getElementById('createBtn').addEventListener('click', async () => {
+      persistName();
+      alertBox.classList.remove('show');
+      try {
+        const name = document.getElementById('roomName').value.trim();
+        const room = await api('/api/rooms', { method: 'POST', body: { name } });
+        location.href = `/room.html?code=${encodeURIComponent(room.code)}`;
+      } catch (err) {
+        showError(err.message || 'Could not create room');
+      }
+    });
+
+    document.getElementById('joinBtn').addEventListener('click', async () => {
+      persistName();
+      alertBox.classList.remove('show');
+      const code = document.getElementById('joinCode').value.trim().toUpperCase();
+      if (!code) return showError('Enter a room code to join');
+      try {
+        const room = await api(`/api/rooms/${encodeURIComponent(code)}`);
+        location.href = `/room.html?code=${encodeURIComponent(room.code)}`;
+      } catch (err) {
+        showError(err.status === 404 ? 'No room found with that code' : (err.message || 'Could not join room'));
+      }
+    });
+
+    document.getElementById('joinCode').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('joinBtn').click();
+    });
+  </script>
+</body>
+</html>
