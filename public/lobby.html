@@ -4,6 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lobby · CodeAlpha VideoChat</title>
+  <meta name="description" content="Set up your hardware and check audio levels before joining rooms. CodeAlpha VideoChat offers a secure browser-native conference room." />
+  <meta name="keywords" content="Video chat lobby, pre-call preview, camera configuration, microphone settings, join conference" />
+  <meta name="author" content="CodeAlpha Team" />
+  <meta name="robots" content="index, follow" />
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Lobby · CodeAlpha VideoChat" />
+  <meta property="og:description" content="Check your layout, toggle camera, and test microphone in our secure pre-call panel before entering your collaborative session." />
+  <meta property="og:image" content="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=800&auto=format&fit=crop" />
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:title" content="Lobby · CodeAlpha VideoChat" />
+  <meta property="twitter:description" content="Check your layout, toggle camera, and test microphone in our secure pre-call panel before entering your collaborative session." />
+  <meta property="twitter:image" content="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=800&auto=format&fit=crop" />
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "CodeAlpha VideoChat",
+    "description": "A real-time multi-user video chat and collaboration application featuring screen sharing, file transfer, and canvas whiteboard.",
+    "applicationCategory": "CommunicationApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0.00",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body>
@@ -21,34 +51,51 @@
         </div>
       </div>
 
-      <div class="lobby-grid">
+      <div class="lobby-grid-layout" style="display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+        <!-- Left: Pre-call media preview -->
         <div>
-          <label for="displayName">Your display name in calls</label>
-          <input id="displayName" type="text" placeholder="How others see you" />
-          <p class="hint">This is the name shown on your video tile and in chat.</p>
-        </div>
-
-        <div class="divider">create a new room</div>
-
-        <div>
-          <label for="roomName">Room name (optional)</label>
-          <div class="row">
-            <input id="roomName" type="text" placeholder="Team standup" />
-            <button class="btn small" id="createBtn" style="flex:none;">Create &amp; join →</button>
+          <label style="margin-top:0;">Camera &amp; Mic Preview</label>
+          <div class="lobby-preview-wrapper cam-off" id="lobbyPreviewWrapper">
+            <div class="preview-placeholder" id="previewPlaceholder">Camera is off</div>
+            <video id="lobbyPreview" autoplay playsinline muted></video>
+            <div class="preview-controls">
+              <button class="preview-ctrl-btn off" id="lobbyMicBtn" type="button" title="Toggle Microphone">🔇</button>
+              <button class="preview-ctrl-btn off" id="lobbyCamBtn" type="button" title="Toggle Camera">🚫</button>
+            </div>
           </div>
+          <p class="hint">Adjust your lighting, frame, and check device authorization before joining.</p>
         </div>
 
-        <div class="divider">or join an existing one</div>
-
-        <div>
-          <label for="joinCode">Room code</label>
-          <div class="row">
-            <input id="joinCode" type="text" placeholder="ABC123" maxlength="8" style="text-transform:uppercase; letter-spacing:3px; font-family:ui-monospace,monospace;" />
-            <button class="btn small secondary" id="joinBtn" style="flex:none;">Join room</button>
+        <!-- Right: Actions -->
+        <div class="lobby-grid" style="margin-top:0;">
+          <div>
+            <label for="displayName" style="margin-top:0;">Your display name in calls</label>
+            <input id="displayName" type="text" placeholder="How others see you" />
+            <p class="hint">This is the name shown on your video tile and in chat.</p>
           </div>
-        </div>
 
-        <div id="alert" class="alert error"></div>
+          <div class="divider">create a new room</div>
+
+          <div>
+            <label for="roomName">Room name (optional)</label>
+            <div class="row">
+              <input id="roomName" type="text" placeholder="Team standup" />
+              <button class="btn small" id="createBtn" style="flex:none;">Create &amp; join →</button>
+            </div>
+          </div>
+
+          <div class="divider">or join an existing one</div>
+
+          <div>
+            <label for="joinCode">Room code</label>
+            <div class="row">
+              <input id="joinCode" type="text" placeholder="ABC123" maxlength="8" style="text-transform:uppercase; letter-spacing:3px; font-family:ui-monospace,monospace;" />
+              <button class="btn small secondary" id="joinBtn" style="flex:none;">Join room</button>
+            </div>
+          </div>
+
+          <div id="alert" class="alert error"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -110,6 +157,102 @@
 
     document.getElementById('joinCode').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') document.getElementById('joinBtn').click();
+    });
+
+    // --- Pre-call Camera/Mic Setup ---
+    const previewVideo = document.getElementById('lobbyPreview');
+    const previewWrapper = document.getElementById('lobbyPreviewWrapper');
+    const lobbyMicBtn = document.getElementById('lobbyMicBtn');
+    const lobbyCamBtn = document.getElementById('lobbyCamBtn');
+
+    let previewStream = null;
+    let micPref = localStorage.getItem('lobby_mic_enabled') !== 'false';
+    let camPref = localStorage.getItem('lobby_cam_enabled') !== 'false';
+
+    updateToggleUI();
+
+    async function initPreview() {
+      if (previewStream) {
+        previewStream.getTracks().forEach(t => t.stop());
+        previewStream = null;
+      }
+
+      if (!camPref && !micPref) {
+        previewWrapper.className = 'lobby-preview-wrapper cam-off';
+        previewVideo.srcObject = null;
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: camPref,
+          audio: micPref
+        });
+        previewStream = stream;
+
+        if (camPref) {
+          previewVideo.srcObject = stream;
+          previewWrapper.className = 'lobby-preview-wrapper cam-on';
+        } else {
+          previewVideo.srcObject = null;
+          previewWrapper.className = 'lobby-preview-wrapper cam-off';
+        }
+
+        stream.getAudioTracks().forEach(t => t.enabled = micPref);
+      } catch (err) {
+        console.warn('Lobby preview media access failed:', err);
+        previewWrapper.className = 'lobby-preview-wrapper cam-off';
+        document.getElementById('previewPlaceholder').textContent = 'Camera/Mic unauthorized';
+      }
+    }
+
+    function updateToggleUI() {
+      if (micPref) {
+        lobbyMicBtn.textContent = '🎙️';
+        lobbyMicBtn.classList.remove('off');
+        lobbyMicBtn.title = 'Mute Microphone';
+      } else {
+        lobbyMicBtn.textContent = '🔇';
+        lobbyMicBtn.classList.add('off');
+        lobbyMicBtn.title = 'Unmute Microphone';
+      }
+
+      if (camPref) {
+        lobbyCamBtn.textContent = '📷';
+        lobbyCamBtn.classList.remove('off');
+        lobbyCamBtn.title = 'Turn Camera Off';
+      } else {
+        lobbyCamBtn.textContent = '🚫';
+        lobbyCamBtn.classList.add('off');
+        lobbyCamBtn.title = 'Turn Camera On';
+      }
+
+      localStorage.setItem('lobby_mic_enabled', micPref);
+      localStorage.setItem('lobby_cam_enabled', camPref);
+    }
+
+    lobbyMicBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      micPref = !micPref;
+      updateToggleUI();
+      initPreview();
+    });
+
+    lobbyCamBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      camPref = !camPref;
+      updateToggleUI();
+      initPreview();
+    });
+
+    // Start preview stream
+    initPreview();
+
+    // Cleanup preview stream on navigating away
+    window.addEventListener('beforeunload', () => {
+      if (previewStream) {
+        previewStream.getTracks().forEach(t => t.stop());
+      }
     });
   </script>
 </body>

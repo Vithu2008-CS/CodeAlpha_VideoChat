@@ -4,6 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Room · CodeAlpha VideoChat</title>
+  <meta name="description" content="Collaborative secure video conferencing room with live screen sharing, synchronized drawing whiteboard, and chat file uploads." />
+  <meta name="keywords" content="WebRTC video session, secure chat room, live collaborative canvas, download whiteboard, peer screen share" />
+  <meta name="author" content="CodeAlpha Team" />
+  <meta name="robots" content="noindex, nofollow" /> <!-- Protect private meeting rooms from indices -->
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Room · CodeAlpha VideoChat" />
+  <meta property="og:description" content="Collaborative secure video conferencing room with live screen sharing, synchronized drawing whiteboard, and chat file uploads." />
+  <meta property="og:image" content="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=800&auto=format&fit=crop" />
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:title" content="Room · CodeAlpha VideoChat" />
+  <meta property="twitter:description" content="Collaborative secure video conferencing room with live screen sharing, synchronized drawing whiteboard, and chat file uploads." />
+  <meta property="twitter:image" content="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=800&auto=format&fit=crop" />
+  <!-- Structured Data (JSON-LD) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "CodeAlpha VideoChat",
+    "description": "A real-time multi-user video chat and collaboration application featuring screen sharing, file transfer, and canvas whiteboard.",
+    "applicationCategory": "CommunicationApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0.00",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body class="room-body">
@@ -74,9 +104,23 @@
         <div class="wb-toolbar">
           <button class="wb-tool active" id="wbPen" title="Pen">✏️</button>
           <button class="wb-tool" id="wbEraser" title="Eraser">🧽</button>
-          <input type="color" id="wbColor" value="#1c2138" title="Colour" />
-          <input type="range" id="wbSize" min="1" max="40" value="4" title="Brush size" />
-          <button class="wb-tool" id="wbClear" title="Clear board" style="margin-left:auto;width:auto;padding:0 12px;">Clear</button>
+          
+          <!-- Quick Color Palette Swatches -->
+          <div class="wb-swatches">
+            <div class="wb-swatch active" data-color="#1e1b4b" style="background:#1e1b4b;"></div>
+            <div class="wb-swatch" data-color="#ef4444" style="background:#ef4444;"></div>
+            <div class="wb-swatch" data-color="#10b981" style="background:#10b981;"></div>
+            <div class="wb-swatch" data-color="#3b82f6" style="background:#3b82f6;"></div>
+            <div class="wb-swatch" data-color="#f59e0b" style="background:#f59e0b;"></div>
+            <div class="wb-swatch" data-color="#ffffff" style="background:#ffffff; border:1px solid #ccc;"></div>
+          </div>
+          
+          <input type="color" id="wbColor" value="#1e1b4b" title="Custom Colour" style="width:28px;height:28px;border-radius:50%;padding:0;border:none;cursor:pointer;" />
+          <input type="range" id="wbSize" min="1" max="40" value="4" title="Brush size" style="width:60px;" />
+          
+          <!-- Download Board Button -->
+          <button class="wb-tool" id="wbDownload" title="Download Board PNG" style="width:auto;padding:0 8px;">💾</button>
+          <button class="wb-tool" id="wbClear" title="Clear board" style="margin-left:auto;width:auto;padding:0 8px;">Clear</button>
         </div>
         <div class="wb-canvas-wrap">
           <canvas id="whiteboard"></canvas>
