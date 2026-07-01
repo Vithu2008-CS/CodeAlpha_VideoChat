@@ -10,6 +10,8 @@
 import { verifyToken } from './lib/jwt.js';
 
 export function initSignaling(io) {
+  // In-memory cache for room messages: roomCode -> Array of messages (limit 50)
+  const roomMessages = new Map();
   // --- Handshake authentication ---
   io.use((socket, next) => {
     const auth = socket.handshake.auth || {};
@@ -47,7 +49,9 @@ export function initSignaling(io) {
           userId: s.data.userId,
         }));
 
-      socket.emit('existing-participants', { participants });
+      const recentMessages = roomMessages.get(code) || [];
+
+      socket.emit('existing-participants', { participants, recentMessages });
 
       // Tell everyone else that a new peer arrived.
       socket.to(code).emit('user-joined', {
@@ -83,12 +87,24 @@ export function initSignaling(io) {
       if (!room || typeof text !== 'string') return;
       const clean = text.trim().slice(0, 2000);
       if (!clean) return;
-      io.to(room).emit('chat-message', {
+
+      const payload = {
         from: socket.id,
         displayName: socket.data.displayName,
         text: clean,
         ts: Date.now(),
-      });
+      };
+
+      if (!roomMessages.has(room)) {
+        roomMessages.set(room, []);
+      }
+      const history = roomMessages.get(room);
+      history.push(payload);
+      if (history.length > 50) {
+        history.shift();
+      }
+
+      io.to(room).emit('chat-message', payload);
     });
 
     // --- File sharing notification (file itself uploaded over HTTP) ---
