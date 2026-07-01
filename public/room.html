@@ -131,8 +131,8 @@
 
   <div class="toast-stack" id="toastStack"></div>
 
-  <!-- Socket.io client served by the signaling server -->
-  <script src="/socket.io/socket.io.js"></script>
+  <!-- Socket.io client loaded from CDN (prevents 404 in serverless environments) -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
   <script type="module" src="/js/room.js"></script>
 </body>
 </html>

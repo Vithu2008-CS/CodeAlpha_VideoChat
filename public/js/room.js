@@ -39,8 +39,15 @@ async function main() {
   setupTabs();
 
   // --- Connect the signaling socket (JWT-authenticated handshake) ---
-  // `io` is the global from /socket.io/socket.io.js
-  const socket = io({
+  let signalingUrl = '';
+  try {
+    const config = await api('/api/config');
+    signalingUrl = config.signalingUrl || '';
+  } catch (err) {
+    console.warn('Failed to fetch signalingUrl configuration, falling back to same-origin:', err);
+  }
+
+  const socket = io(signalingUrl, {
     auth: { token: getToken(), displayName },
     transports: ['websocket', 'polling'],
   });

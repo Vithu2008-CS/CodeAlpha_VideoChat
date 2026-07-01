@@ -14,6 +14,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, time: Date.now() }));
+app.get('/api/config', (req, res) => {
+  res.json({
+    signalingUrl: process.env.SIGNALING_SERVER_URL || ''
+  });
+});
 
 // --- Static: uploaded files + frontend ---
 app.use('/uploads', express.static(uploadsDir));
