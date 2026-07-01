@@ -13,6 +13,8 @@ export function initWhiteboard({ socket }) {
   const colorInput = document.getElementById('wbColor');
   const sizeInput = document.getElementById('wbSize');
   const clearBtn = document.getElementById('wbClear');
+  const downloadBtn = document.getElementById('wbDownload');
+  const swatches = document.querySelectorAll('.wb-swatch');
 
   let tool = 'pen';
   let drawing = false;
@@ -120,6 +122,46 @@ export function initWhiteboard({ socket }) {
   }
   penBtn.addEventListener('click', () => selectTool('pen'));
   eraserBtn.addEventListener('click', () => selectTool('eraser'));
+  
+  // Palette Swatches
+  swatches.forEach((swatch) => {
+    swatch.addEventListener('click', () => {
+      swatches.forEach((s) => s.classList.remove('active'));
+      swatch.classList.add('active');
+      colorInput.value = swatch.dataset.color;
+      selectTool('pen');
+    });
+  });
+
+  // Custom Color Override
+  colorInput.addEventListener('input', () => {
+    swatches.forEach((s) => s.classList.remove('active'));
+    selectTool('pen');
+  });
+
+  // Download whiteboard as PNG (with white background underneath)
+  downloadBtn?.addEventListener('click', () => {
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const exportCtx = exportCanvas.getContext('2d');
+    
+    // Fill white background (so drawing doesn't look transparent/invisible)
+    exportCtx.fillStyle = '#ffffff';
+    exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    
+    // Render whiteboard contents
+    exportCtx.drawImage(canvas, 0, 0);
+    
+    const url = exportCanvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `whiteboard-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
   clearBtn.addEventListener('click', () => {
     clearLocal();
     socket.emit('whiteboard-clear');

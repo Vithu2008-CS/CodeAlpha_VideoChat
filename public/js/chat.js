@@ -39,16 +39,16 @@ export function initChat({ socket, roomCode, toast }) {
     log.scrollTop = log.scrollHeight;
   }
 
-  function addMessage({ text, displayName, mine }) {
+  function addMessage({ text, displayName, mine, ts }) {
     hideEmpty();
     const wrap = document.createElement('div');
     wrap.className = `msg ${mine ? 'mine' : ''}`.trim();
     wrap.innerHTML = `
-      <div class="meta">${escapeHtml(mine ? 'You' : displayName)} · ${time()}</div>
+      <div class="meta">${escapeHtml(mine ? 'You' : displayName)} · ${time(ts)}</div>
       <div class="bubble">${linkify(escapeHtml(text))}</div>`;
     log.appendChild(wrap);
     scrollDown();
-    if (!mine) bumpUnread();
+    if (!mine && !ts) bumpUnread();
   }
 
   function addSystem(text) {
@@ -119,6 +119,18 @@ export function initChat({ socket, roomCode, toast }) {
   });
 
   // ---- Receiving ----
+  socket.on('existing-participants', ({ recentMessages } = {}) => {
+    if (!recentMessages) return;
+    recentMessages.forEach((msg) => {
+      addMessage({
+        text: msg.text,
+        displayName: msg.displayName,
+        mine: msg.from === socket.id,
+        ts: msg.ts,
+      });
+    });
+  });
+
   socket.on('chat-message', ({ from, displayName, text }) => {
     if (from === socket.id) return; // we already rendered our own
     addMessage({ text, displayName, mine: false });
@@ -143,8 +155,9 @@ export function initChat({ socket, roomCode, toast }) {
 }
 
 // ---- helpers ----
-function time() {
-  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function time(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => (

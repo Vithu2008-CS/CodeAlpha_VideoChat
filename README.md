@@ -20,6 +20,12 @@ Node server only does authentication, signaling and serving the static frontend.
 | 🎨 **Shared whiteboard** | HTML5 `<canvas>`; each stroke segment is broadcast over Socket.io using normalised coordinates so all participants stay in sync. Tools: pen, colour, eraser, brush size, clear. |
 | 🔐 **Data encryption** | WebRTC media **and** data channels are encrypted by default (DTLS-SRTP) — mesh media is end-to-end encrypted between participants. Passwords are **bcrypt**-hashed. Serve over **HTTPS** in production. |
 | 🔑 **User authentication** | Register/login with **JWT** (Bearer) + bcrypt. The Socket.io handshake is authenticated with the same JWT, so only signed-in users can join rooms. |
+| 📹 **Pre-call Media Preview** | Lobby preview with audio level and device authorization. Toggle microphone and camera state before joining; preferences persist. |
+| 🎙️ **Active Speaker Detection** | Browser-native `AudioContext` and `AnalyserNode` monitoring. Compares real-time amplitude and highlights the speaking user's tile with glowing frames and animations. |
+| 💾 **Whiteboard Exporter** | Save high-resolution copies of drawings instantly. Downloads canvas layers compiled over solid backgrounds as local PNG assets. |
+| 💬 **Smart Chat Sync** | In-memory message cache (limit 50) hosted on the signaling server, catch-up history is fed directly to late-joiners. |
+| 🛡️ **SEO & Social Previews** | Structured JSON-LD metadata schema markers, meta keywords, descriptive titles, Open Graph social tags, and Twitter Cards across all views. |
+
 
 ---
 

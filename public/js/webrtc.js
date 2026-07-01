@@ -209,7 +209,9 @@ export function createWebRTC({ socket, displayName, onParticipants, onStatus, to
     };
 
     pc.ontrack = (e) => {
-      attachRemoteStream(socketId, entry.displayName, e.streams[0]);
+      const stream = e.streams[0];
+      attachRemoteStream(socketId, entry.displayName, stream);
+      setupStreamAnalyzer(socketId, stream);
       onStatus?.('connected');
     };
 
@@ -240,6 +242,7 @@ export function createWebRTC({ socket, displayName, onParticipants, onStatus, to
       try { entry.pc.close(); } catch {}
       peers.delete(socketId);
     }
+    cleanupStreamAnalyzer(socketId);
     names.delete(socketId);
     removeTile(socketId);
     publishParticipants();
@@ -320,28 +323,66 @@ export function createWebRTC({ socket, displayName, onParticipants, onStatus, to
   }
 
   // ---- Public controls ----
-  async function start(roomCode) {
+  async function start(roomCode, { initialMic = true, initialCam = true } = {}) {
     localNameEl.textContent = displayName;
     localTile.dataset.initial = initialOf(displayName);
 
     try {
+      // Capture both audio and video so we have the tracks ready for in-call toggles
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      
+      micEnabled = initialMic;
+      camEnabled = initialCam;
+      
+      localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+      localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
     } catch (err) {
-      console.error('getUserMedia failed', err);
-      toast?.('Camera/microphone unavailable — joining without media', 'error');
-      // Fall back to an empty stream so signaling/chat/whiteboard still work.
-      localStream = new MediaStream();
+      console.warn('getUserMedia both tracks failed, trying fallback...', err);
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        micEnabled = false;
+        camEnabled = initialCam;
+        localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
+      } catch (err2) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          micEnabled = initialMic;
+          camEnabled = false;
+          localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+        } catch (err3) {
+          toast?.('Camera/microphone unavailable — joining without media', 'error');
+          localStream = new MediaStream();
+          micEnabled = false;
+          camEnabled = false;
+        }
+      }
     }
+    
     localVideo.srcObject = localStream;
-
-    micEnabled = localStream.getAudioTracks().length > 0;
-    camEnabled = localStream.getVideoTracks().length > 0;
     localTile.classList.toggle('muted', !micEnabled);
     localTile.classList.toggle('cam-off', !camEnabled);
+
+    // Sync button states on the control bar
+    const micBtn = document.getElementById('micBtn');
+    const camBtn = document.getElementById('camBtn');
+    if (micBtn) {
+      micBtn.className = `ctrl ${micEnabled ? 'active' : 'off'}`;
+      micBtn.textContent = micEnabled ? '🎙️' : '🔇';
+      micBtn.title = micEnabled ? 'Mute microphone' : 'Unmute microphone';
+    }
+    if (camBtn) {
+      camBtn.className = `ctrl ${camEnabled ? 'active' : 'off'}`;
+      camBtn.textContent = camEnabled ? '📷' : '🚫';
+      camBtn.title = camEnabled ? 'Turn camera off' : 'Turn camera on';
+    }
+
+    setupStreamAnalyzer('local', localStream);
 
     wireSocket();
     socket.emit('join-room', { roomCode });
     publishParticipants();
+
+    startSpeakerDetection();
   }
 
   function toggleMic() {
@@ -411,6 +452,17 @@ export function createWebRTC({ socket, displayName, onParticipants, onStatus, to
   }
 
   function leave() {
+    if (speakerInterval) {
+      clearInterval(speakerInterval);
+      speakerInterval = null;
+    }
+    analyzers.forEach((v, k) => cleanupStreamAnalyzer(k));
+    analyzers.clear();
+    if (audioCtx) {
+      try { audioCtx.close(); } catch {}
+      audioCtx = null;
+    }
+
     try { socket.emit('leave-room'); } catch {}
     peers.forEach(({ pc }) => { try { pc.close(); } catch {} });
     peers.clear();
