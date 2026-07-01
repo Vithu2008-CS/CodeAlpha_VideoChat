@@ -6,7 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js",
+    "start": "npx prisma db push && node seed.js && node src/server.js",
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
     "seed": "node seed.js",
