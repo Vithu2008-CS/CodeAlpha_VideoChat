@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Room · CodeAlpha VideoChat</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="room-body">
+  <div class="room-shell">
+    <!-- ===== Stage: video grid + controls ===== -->
+    <div class="stage">
+      <div class="topbar">
+        <div class="brand" style="margin:0;">
+          <div class="logo" style="width:32px;height:32px;font-size:17px;">🎥</div>
+        </div>
+        <div class="room-meta">
+          <strong id="roomName">Room</strong>
+          <span>Share this code to invite others</span>
+        </div>
+        <button class="code-pill" id="codePill" title="Click to copy">------</button>
+        <div class="spacer"></div>
+        <span class="muted-text" id="connState">Connecting…</span>
+      </div>
+
+      <div class="video-grid" id="videoGrid">
+        <!-- Local tile -->
+        <div class="tile local" id="localTile" data-initial="?">
+          <video id="localVideo" autoplay playsinline muted></video>
+          <div class="badges">
+            <div class="badge mic">🔇</div>
+            <div class="badge cam">📷</div>
+          </div>
+          <div class="name"><span id="localName">You</span> (you)</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="ctrl active" id="micBtn" title="Toggle microphone">🎙️</button>
+        <button class="ctrl active" id="camBtn" title="Toggle camera">📷</button>
+        <button class="ctrl" id="screenBtn" title="Share your screen">🖥️</button>
+        <button class="ctrl leave" id="leaveBtn" title="Leave the call">📞 Leave</button>
+      </div>
+    </div>
+
+    <!-- ===== Side panel ===== -->
+    <aside class="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="participants">Participants <span class="count" id="pCount">(1)</span></button>
+        <button class="tab" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="whiteboard">Whiteboard</button>
+      </div>
+
+      <!-- Participants -->
+      <div class="tab-body active" data-tab="participants">
+        <ul class="participant-list" id="participantList"></ul>
+      </div>
+
+      <!-- Chat + files -->
+      <div class="tab-body" data-tab="chat">
+        <div class="chat-log" id="chatLog">
+          <div class="empty" id="chatEmpty">No messages yet. Say hi 👋</div>
+        </div>
+        <div class="chat-input-bar">
+          <button class="icon-btn" id="fileBtn" title="Share a file">📎</button>
+          <input type="file" id="fileInput" hidden />
+          <input type="text" id="chatInput" placeholder="Type a message…" autocomplete="off" />
+          <button class="icon-btn" id="sendBtn" title="Send">➤</button>
+        </div>
+      </div>
+
+      <!-- Whiteboard -->
+      <div class="tab-body" data-tab="whiteboard">
+        <div class="wb-toolbar">
+          <button class="wb-tool active" id="wbPen" title="Pen">✏️</button>
+          <button class="wb-tool" id="wbEraser" title="Eraser">🧽</button>
+          <input type="color" id="wbColor" value="#1c2138" title="Colour" />
+          <input type="range" id="wbSize" min="1" max="40" value="4" title="Brush size" />
+          <button class="wb-tool" id="wbClear" title="Clear board" style="margin-left:auto;width:auto;padding:0 12px;">Clear</button>
+        </div>
+        <div class="wb-canvas-wrap">
+          <canvas id="whiteboard"></canvas>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <!-- Socket.io client served by the signaling server -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/room.js"></script>
+</body>
+</html>
