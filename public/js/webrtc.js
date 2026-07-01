@@ -1,0 +1,328 @@
+// webrtc.js — WebRTC mesh: local media, peer connections, screen share.
+//
+// Topology: full mesh. The peer that *joins* opens an RTCPeerConnection and
+// sends an offer to every peer already in the room. Existing peers answer.
+// That clear "newcomer initiates" rule avoids offer/answer glare.
+//
+// Media is end-to-end encrypted by WebRTC's mandatory DTLS-SRTP — it never
+// passes through our server; only signaling metadata is relayed by Socket.io.
+
+const RTC_CONFIG = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+};
+
+export function createWebRTC({ socket, displayName, onParticipants, onStatus, toast }) {
+  // DOM
+  const grid = document.getElementById('videoGrid');
+  const localTile = document.getElementById('localTile');
+  const localVideo = document.getElementById('localVideo');
+  const localNameEl = document.getElementById('localName');
+
+  // State
+  let localStream = null;
+  let screenStream = null;
+  let isSharing = false;
+  let micEnabled = true;
+  let camEnabled = true;
+
+  // socketId -> { pc, displayName, pendingCandidates: [], remoteSet: bool }
+  const peers = new Map();
+  // socketId -> displayName (everyone we know about, for the participants list)
+  const names = new Map();
+
+  // ---- Participants helpers ----
+  function publishParticipants() {
+    onParticipants?.(new Map(names));
+    updateGridDensity();
+  }
+  function updateGridDensity() {
+    const total = grid.querySelectorAll('.tile').length;
+    grid.classList.toggle('few', total <= 2);
+  }
+
+  // ---- Video tiles ----
+  function initialOf(name) {
+    return (name || '?').trim().charAt(0).toUpperCase() || '?';
+  }
+
+  function ensureTile(socketId, name) {
+    let tile = document.getElementById(`tile-${socketId}`);
+    if (tile) return tile;
+
+    tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.id = `tile-${socketId}`;
+    tile.dataset.initial = initialOf(name);
+    tile.innerHTML = `
+      <video autoplay playsinline></video>
+      <div class="badges">
+        <div class="badge mic">🔇</div>
+        <div class="badge cam">📷</div>
+      </div>
+      <div class="name"><span class="who">${escapeHtml(name || 'Guest')}</span></div>`;
+    grid.appendChild(tile);
+    updateGridDensity();
+    return tile;
+  }
+
+  function attachRemoteStream(socketId, name, stream) {
+    const tile = ensureTile(socketId, name);
+    const video = tile.querySelector('video');
+    if (video.srcObject !== stream) video.srcObject = stream;
+  }
+
+  function removeTile(socketId) {
+    document.getElementById(`tile-${socketId}`)?.remove();
+    updateGridDensity();
+  }
+
+  // ---- Peer connection lifecycle ----
+  function activeVideoTrack() {
+    if (isSharing && screenStream) return screenStream.getVideoTracks()[0];
+    return localStream?.getVideoTracks()[0] || null;
+  }
+
+  function buildPeer(socketId, name) {
+    if (peers.has(socketId)) return peers.get(socketId).pc;
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const entry = { pc, displayName: name, pendingCandidates: [], remoteSet: false };
+    peers.set(socketId, entry);
+    names.set(socketId, name);
+
+    // Send local audio + the currently-active video track (camera or screen).
+    localStream.getAudioTracks().forEach((t) => pc.addTrack(t, localStream));
+    const vTrack = activeVideoTrack();
+    if (vTrack) pc.addTrack(vTrack, localStream);
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) socket.emit('ice-candidate', { target: socketId, candidate: e.candidate });
+    };
+
+    pc.ontrack = (e) => {
+      attachRemoteStream(socketId, entry.displayName, e.streams[0]);
+      onStatus?.('connected');
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed') {
+        // A failed connection won't recover on its own in this simple demo.
+        removePeer(socketId);
+      }
+    };
+
+    publishParticipants();
+    return pc;
+  }
+
+  async function flushCandidates(socketId) {
+    const entry = peers.get(socketId);
+    if (!entry) return;
+    entry.remoteSet = true;
+    for (const c of entry.pendingCandidates) {
+      try { await entry.pc.addIceCandidate(c); } catch (err) { console.warn('addIceCandidate failed', err); }
+    }
+    entry.pendingCandidates = [];
+  }
+
+  function removePeer(socketId) {
+    const entry = peers.get(socketId);
+    if (entry) {
+      try { entry.pc.close(); } catch {}
+      peers.delete(socketId);
+    }
+    names.delete(socketId);
+    removeTile(socketId);
+    publishParticipants();
+  }
+
+  // Newcomer -> existing peer: create and send an offer.
+  async function callPeer(socketId, name) {
+    try {
+      const pc = buildPeer(socketId, name);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { target: socketId, sdp: pc.localDescription });
+    } catch (err) {
+      console.error('callPeer error', err);
+    }
+  }
+
+  // ---- Socket wiring ----
+  function wireSocket() {
+    socket.on('existing-participants', async ({ participants }) => {
+      onStatus?.('connected');
+      for (const p of participants) {
+        names.set(p.socketId, p.displayName);
+        await callPeer(p.socketId, p.displayName);
+      }
+      publishParticipants();
+    });
+
+    socket.on('user-joined', ({ socketId, displayName: name }) => {
+      // They will send us an offer; just remember their name for now.
+      names.set(socketId, name);
+      publishParticipants();
+      toast?.(`${name} joined`);
+    });
+
+    socket.on('offer', async ({ from, sdp, displayName: name }) => {
+      try {
+        const pc = buildPeer(from, name || names.get(from) || 'Guest');
+        const entry = peers.get(from);
+        if (name) entry.displayName = name;
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        await flushCandidates(from);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('answer', { target: from, sdp: pc.localDescription });
+      } catch (err) {
+        console.error('handle offer error', err);
+      }
+    });
+
+    socket.on('answer', async ({ from, sdp }) => {
+      const entry = peers.get(from);
+      if (!entry) return;
+      try {
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        await flushCandidates(from);
+      } catch (err) {
+        console.error('handle answer error', err);
+      }
+    });
+
+    socket.on('ice-candidate', async ({ from, candidate }) => {
+      const entry = peers.get(from);
+      if (!entry || !candidate) return;
+      const ice = new RTCIceCandidate(candidate);
+      if (entry.remoteSet) {
+        try { await entry.pc.addIceCandidate(ice); } catch (err) { console.warn('addIceCandidate', err); }
+      } else {
+        entry.pendingCandidates.push(ice);
+      }
+    });
+
+    socket.on('user-left', ({ socketId }) => {
+      const name = names.get(socketId);
+      removePeer(socketId);
+      if (name) toast?.(`${name} left`);
+    });
+  }
+
+  // ---- Public controls ----
+  async function start(roomCode) {
+    localNameEl.textContent = displayName;
+    localTile.dataset.initial = initialOf(displayName);
+
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (err) {
+      console.error('getUserMedia failed', err);
+      toast?.('Camera/microphone unavailable — joining without media', 'error');
+      // Fall back to an empty stream so signaling/chat/whiteboard still work.
+      localStream = new MediaStream();
+    }
+    localVideo.srcObject = localStream;
+
+    micEnabled = localStream.getAudioTracks().length > 0;
+    camEnabled = localStream.getVideoTracks().length > 0;
+    localTile.classList.toggle('muted', !micEnabled);
+    localTile.classList.toggle('cam-off', !camEnabled);
+
+    wireSocket();
+    socket.emit('join-room', { roomCode });
+    publishParticipants();
+  }
+
+  function toggleMic() {
+    const tracks = localStream.getAudioTracks();
+    if (!tracks.length) { toast?.('No microphone available', 'error'); return micEnabled; }
+    micEnabled = !micEnabled;
+    tracks.forEach((t) => (t.enabled = micEnabled));
+    localTile.classList.toggle('muted', !micEnabled);
+    return micEnabled;
+  }
+
+  function toggleCam() {
+    const tracks = localStream.getVideoTracks();
+    if (!tracks.length) { toast?.('No camera available', 'error'); return camEnabled; }
+    camEnabled = !camEnabled;
+    tracks.forEach((t) => (t.enabled = camEnabled));
+    localTile.classList.toggle('cam-off', !camEnabled);
+    return camEnabled;
+  }
+
+  async function toggleScreen() {
+    if (isSharing) {
+      stopScreen();
+      return false;
+    }
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    } catch {
+      return false; // user cancelled the picker
+    }
+    const screenTrack = screenStream.getVideoTracks()[0];
+    isSharing = true;
+
+    // Swap the outgoing video track on every peer connection.
+    peers.forEach(({ pc }) => {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (sender) sender.replaceTrack(screenTrack);
+    });
+
+    // Update local preview (keep our audio).
+    localVideo.srcObject = new MediaStream([screenTrack, ...localStream.getAudioTracks()]);
+    localTile.classList.add('screen');
+    localTile.classList.remove('cam-off');
+
+    // Browser "Stop sharing" button.
+    screenTrack.onended = () => stopScreen();
+    return true;
+  }
+
+  function stopScreen() {
+    if (!isSharing) return;
+    isSharing = false;
+    const camTrack = localStream.getVideoTracks()[0] || null;
+
+    peers.forEach(({ pc }) => {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (sender && camTrack) sender.replaceTrack(camTrack);
+    });
+
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => t.stop());
+      screenStream = null;
+    }
+    localVideo.srcObject = localStream;
+    localTile.classList.remove('screen');
+    localTile.classList.toggle('cam-off', !camEnabled);
+  }
+
+  function leave() {
+    try { socket.emit('leave-room'); } catch {}
+    peers.forEach(({ pc }) => { try { pc.close(); } catch {} });
+    peers.clear();
+    if (localStream) localStream.getTracks().forEach((t) => t.stop());
+    if (screenStream) screenStream.getTracks().forEach((t) => t.stop());
+    try { socket.disconnect(); } catch {}
+  }
+
+  return {
+    start,
+    toggleMic,
+    toggleCam,
+    toggleScreen,
+    leave,
+    isSharing: () => isSharing,
+  };
+}
+
+// Small HTML escaper for names rendered into tiles.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
