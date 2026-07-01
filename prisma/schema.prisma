@@ -1,0 +1,45 @@
+// Prisma schema — SQLite, lightweight: users + rooms + shared-file records.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+
+  hostedRooms  Room[]       @relation("HostRooms")
+  sharedFiles  SharedFile[] @relation("Uploader")
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  hostId    String
+  host      User     @relation("HostRooms", fields: [hostId], references: [id])
+  createdAt DateTime @default(now())
+
+  files     SharedFile[]
+}
+
+model SharedFile {
+  id           String   @id @default(cuid())
+  roomId       String
+  room         Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  filename     String
+  url          String
+  uploadedById String
+  uploadedBy   User     @relation("Uploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
