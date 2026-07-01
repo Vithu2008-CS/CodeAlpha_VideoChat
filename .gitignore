@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+
+# Databases (SQLite)
+*.db
+*.db-journal
+dev.db*
+prisma/dev.db*
+prisma/*.db
+prisma/*.db-journal
+
+# Uploaded files (keep the folder, ignore its contents)
+uploads/*
+!uploads/.gitkeep
+
+# Logs & OS cruft
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db
